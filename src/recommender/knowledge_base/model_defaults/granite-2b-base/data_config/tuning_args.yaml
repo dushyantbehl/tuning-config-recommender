@@ -1,0 +1,2 @@
+data_formatter_template: "### Question: {{question}}\n\n### Answer: {{answer}}"
+response_template: "\\\n### Answer:"

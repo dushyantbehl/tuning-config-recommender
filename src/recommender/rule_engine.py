@@ -1,5 +1,5 @@
 from typing import List, Dict
-from .actions import Action, IR, ACTIONS
+from recommender.actions import Action, IR, ACTIONS
 import os
 from copy import deepcopy
 from loguru import logger

@@ -1,4 +1,4 @@
-from .adapters import VanillaAdapter
+from recommender.adapters import VanillaAdapter
 
 if __name__ == "__main__":
     adapter = VanillaAdapter()

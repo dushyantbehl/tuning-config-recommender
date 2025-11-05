@@ -38,6 +38,10 @@ def extract_data_from_general_file(file_path) -> dict:
     return data
 
 
+def maybe_is_a_hf_dataset_id(training_data_path: str) -> bool:
+    return len(training_data_path.split("/")) == 2
+
+
 def load_training_data(training_data_path: str) -> dict:
     """Load and validate training data based on training_data_path."""
     _dataset_cache = {}
@@ -48,13 +52,16 @@ def load_training_data(training_data_path: str) -> dict:
         return data
 
     # Check if path is a folder
-    elif os.path.isdir(training_data_path):
+    elif os.path.isdir(training_data_path) or maybe_is_a_hf_dataset_id:
         try:
             dataset = load_dataset(training_data_path)
             data = [dict(example) for example in dataset["train"]]
             return data
         except Exception as e:
-            raise ValueError(f"Error loading dataset from folder: {e}")
+            raise ValueError(f"Error loading dataset from folder or hf id: {e}")
+    raise ValueError(
+        f"Failed to find a way to load the provided dataset path {training_data_path}"
+    )
 
 
 def load_model_file_from_hf(model_name_or_path: str, file_name: str) -> dict:

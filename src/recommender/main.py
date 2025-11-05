@@ -3,7 +3,7 @@ from recommender.adapters import VanillaAdapter
 if __name__ == "__main__":
     adapter = VanillaAdapter()
     train_config = {
-        "model_name_or_path": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+        "model_name_or_path": "ibm-granite/granite-4.0-h-350m",
         "training_data_path": "ought/raft",
         "tuning_strategy": "full",
     }

@@ -44,7 +44,6 @@ class ApplyDataFormat(Action):
                             # while all paths are checked in action.apply
                             # implementation
                             return False
-                        return True
             if ir.train_config.get("training_data_path", None):
                 return not self._is_data_in_required_format(
                     ir.train_config.get("training_data_path", None)
@@ -149,6 +148,8 @@ class ApplyQAFormat(ApplyDataFormat):
             ]
 
         for dataset in ir.data_preprocessor["datasets"]:
+            if not self._is_data_in_required_format(dataset["data_paths"][0]):
+                continue
             values_to_set = self._get_values_for_given_dataset(dataset)
             ir.train_config.update(
                 {
@@ -256,6 +257,8 @@ class ApplyChatFormat(ApplyDataFormat):
                 }
             ]
         for dataset in ir.data_preprocessor["datasets"]:
+            if not self._is_data_in_required_format(dataset["data_paths"][0]):
+                continue
             values_to_set = self._get_values_for_given_dataset(
                 dataset,
                 ir.train_config["model_name_or_path"],

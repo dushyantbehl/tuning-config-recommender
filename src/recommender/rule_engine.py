@@ -11,12 +11,18 @@ from recommender.utils import set_difference, set_issubset
 class RuleEngine:
     actions: list[Action] = []
     ir_pipeline: list[IR] = []
+    # NOTE: In future we may make this meta specific to each action
+    # for now meta is common across actions
+    actions_meta: list[str] = []
 
     def __init__(self):
         pass
+    
+    def add_to_actions_meta(self, meta: str):
+        self.actions_meta.append(meta)
 
     def _validate_action(self, action: Action):
-        expected_arg_count = 2
+        expected_arg_count = 3
         if action.apply.__code__.co_argcount != expected_arg_count:
             raise ValueError(
                 f"action {action.__class__.__name__} should have {expected_arg_count}, but got {action.apply.__code__.co_argcount}"
@@ -44,7 +50,7 @@ class RuleEngine:
         for action in tqdm(
             self.actions, total=(len(self.actions)), desc="Iterating over actions"
         ):
-            json_merge_patch: IR = action.apply(deepcopy(running_ir))
+            json_merge_patch: IR = action.apply(deepcopy(running_ir), self.actions_meta)
             if not json_merge_patch:
                 continue
             json_patch = self._get_json_patch_from_merge_patch(

@@ -1,4 +1,12 @@
 from recommender.adapters import FMSAdapter, VanillaAdapter
+import sys
+import importlib
+
+user_folder = sys.argv[1]
+sys.path.insert(0, user_folder)
+
+module = importlib.import_module("a")  # a.py
+MyClass = module.MyClass
 
 if __name__ == "__main__":
     print("\n### Vanilla Adapter ###\n")

@@ -1,7 +1,10 @@
-from .actions import IR, Action, Comment, PatchLevel, PatchType
+from recommender.actions import IR, Action, Comment, PatchLevel, PatchType
 
+## Rules to add custom actions
+## 1. Should start with name "Custom_"
+## 2. Should subclass from Action class
 
-class ApplyDefaults(Action):
+class Custom_ApplyDefaults2(Action):
     def apply(self, ir: IR, actions_meta: list[str]) -> IR:
         if self.heuristic_skip(ir) or self.skip:
             self.skip = True
@@ -11,7 +14,7 @@ class ApplyDefaults(Action):
                 "logging_steps": 1,
                 "logging_strategy": "steps",
                 "dataloader_drop_last": True,
-                "bf16": "True",
+                "bf16": "False",
                 "ddp_timeout": "7200",
                 "warmup_ratio": 0.03,
                 "lr_scheduler_type": "linear",

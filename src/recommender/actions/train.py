@@ -14,7 +14,7 @@ from .actions import IR, Action, Comment, PatchLevel, PatchType
 
 
 class ApplyDistributedTraining(Action):
-    def apply(self, ir: IR) -> IR:
+    def apply(self, ir: IR, actions_meta: list[str]) -> IR:
         if self.heuristic_skip(ir) or self.skip:
             self.skip = True
             return
@@ -75,7 +75,7 @@ class ApplyDistributedTraining(Action):
 
 
 class ApplyGradientCheckpointing(Action):
-    def apply(self, ir: IR) -> IR:
+    def apply(self, ir: IR, actions_meta: list[str]) -> IR:
         if self.heuristic_skip(ir) or self.skip:
             self.skip = True
             return
@@ -112,7 +112,7 @@ class ApplyLoRAConfig(Action):
             return False
         return True
 
-    def apply(self, ir: IR) -> IR:
+    def apply(self, ir: IR, actions_meta: list[str]) -> IR:
         if self.heuristic_skip(ir) or self.skip:
             self.skip = True
             return
@@ -151,7 +151,7 @@ class ApplyMoEOptimization(Action):
             return False
         return True
 
-    def apply(self, ir: IR) -> IR:
+    def apply(self, ir: IR, actions_meta: list[str]) -> IR:
         if self.heuristic_skip(ir) or self.skip:
             self.skip = True
             return
@@ -177,7 +177,7 @@ class ApplyMoEOptimization(Action):
 
 
 class ApplyOptimalBatchSize(Action):
-    def apply(self, ir: IR) -> IR:
+    def apply(self, ir: IR, actions_meta: list[str]) -> IR:
         if self.heuristic_skip(ir) or self.skip:
             self.skip = True
             return
@@ -229,7 +229,7 @@ class ApplyFastKernelsOptimization(Action):
             return False
         return True
 
-    def apply(self, ir: IR) -> IR:
+    def apply(self, ir: IR, actions_meta: list[str]) -> IR:
         if self.heuristic_skip(ir) or self.skip:
             self.skip = True
             return
@@ -249,7 +249,7 @@ class ApplyFastKernelsOptimization(Action):
 
 
 class ApplyTrainingOptimization(Action):
-    def apply(self, ir: IR) -> IR:
+    def apply(self, ir: IR, actions_meta: list[str]) -> IR:
         if self.heuristic_skip(ir) or self.skip:
             self.skip = True
             return

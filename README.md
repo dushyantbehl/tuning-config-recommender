@@ -8,13 +8,31 @@
 pip install -e .
 ```
 
-## Usage
+## Library Usage
 
 An example is given in `main.py` file which generates tuning configuration for [fms-hf-tuning](https://github.com/foundation-model-stack/fms-hf-tuning) stack given model `ibm-granite/granite-4.0-h-350m` and dataset with HF ID `ought/raft`.
 
 ```
 python main.py
 ```
+
+## CLI usage
+
+```
+python src/cli.py --tuning-data-config ./artifacts/test/data_config.yaml --accelerate-config ./artifacts/test/accelerate_config.yaml --tuning-config ./artifacts/test/tuning_config.yaml --compute-config ./artifacts/test/compute_config.yaml --output-dir ./output
+```
+
+Custom rules-dir usage
+
+```
+python src/cli.py --tuning-data-config ./artifacts/test/data_config.yaml --accelerate-config ./artifacts/test/accelerate_config.yaml --tuning-config ./artifacts/test/tuning_config.yaml --compute-config ./artifacts/test/compute_config.yaml --output-dir ./output --rules-dir custom-rules-dir
+```
+
+Writing custom action rules for custom modification would require following the below
+1. Should start with name "Custom_"
+2. Should subclass from `Action` class
+
+An example can be found at [custom-rules-dir](./custom-rules-dir/).
 
 ## Architecture
 

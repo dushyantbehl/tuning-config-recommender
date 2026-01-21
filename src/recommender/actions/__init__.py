@@ -1,4 +1,4 @@
-from .actions import IR, Action
+from .actions import IR, Action, Comment, PatchLevel, PatchType
 from .compute import ApplyComputeConfig
 from .data import ApplyChatFormat, ApplyQAFormat
 from .defaults import ApplyDefaults

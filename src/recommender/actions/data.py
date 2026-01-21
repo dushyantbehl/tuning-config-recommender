@@ -126,7 +126,7 @@ class ApplyQAFormat(ApplyDataFormat):
     def _get_values_for_given_dataset(self, dataset: dict):
         return self._get_values_for_given_datapath(dataset.get("data_paths")[0])
 
-    def apply(self, ir: IR) -> IR:
+    def apply(self, ir: IR, actions_meta: list[str]) -> IR:
         if self.heuristic_skip(ir) or self.skip:
             self.skip = True
             return
@@ -236,7 +236,7 @@ class ApplyChatFormat(ApplyDataFormat):
             dataset.get("data_paths")[0], model_name_or_path, max_seq_length
         )
 
-    def apply(self, ir: IR) -> IR:
+    def apply(self, ir: IR, actions_meta: list[str]) -> IR:
         if self.heuristic_skip(ir) or self.skip:
             self.skip = True
             return

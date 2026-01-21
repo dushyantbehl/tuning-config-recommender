@@ -9,7 +9,7 @@ from recommender.utils.adapter_utils import (
     write_yaml_preserving_templates,
 )
 from recommender.utils.data_processing import get_model_path
-
+from loguru import logger
 
 class Adapter:
     def execute(self):
@@ -18,16 +18,26 @@ class Adapter:
 
 class VanillaAdapter(Adapter):
     def execute(
-        self, train_config, compute_config, dist_config, data_config, unique_tag
+        self, train_config, compute_config, dist_config, data_config, unique_tag, skip_estimator=None
     ):
         re = RuleEngine()
         re.register_all_inbuilt_actions()
+        if hasattr(self, "additional_actions") and self.additional_actions:
+            logger.info("Registering additional actions")
+            for _, action_cls in self.additional_actions.items():
+                re.register_action(action_cls())
+        if skip_estimator:
+            re.add_to_actions_meta("skip_estimator")
         model_name_or_path = train_config["model_name_or_path"]
         local_model_name_or_path = get_model_path(
             model_name_or_path, unique_tag=unique_tag
         )
         train_config["model_name_or_path"] = local_model_name_or_path
         train_config["original_model_name_or_path"] = model_name_or_path
+        if "tuning_strategy" not in train_config:
+            train_config["tuning_strategy"] = "full"
+            if train_config.get("peft_method", None) == "lora":
+                train_config["tuning_strategy"] = "lora"
 
         ir = IR(
             train_config=train_config,
@@ -36,12 +46,14 @@ class VanillaAdapter(Adapter):
             data_preprocessor=data_config,
         )
         ir_to_apply, json_patches = re.apply(ir=deepcopy(ir))
+        ir_to_apply.train_config.pop("tuning_strategy")
         return ir_to_apply, json_patches
 
 
 class FMSAdapter(VanillaAdapter):
-    def __init__(self, base_dir: str | Path = "out/fms_final"):
+    def __init__(self, base_dir: str | Path = "out/fms_final", additional_actions=[]):
         self.base_dir = Path(base_dir)
+        self.additional_actions = additional_actions
 
     def _populate_data_config(self, data_paths: List[str]):
         # NOTE: The assumption is all the data paths are uniform
@@ -61,7 +73,7 @@ class FMSAdapter(VanillaAdapter):
         }
 
     def execute(
-        self, train_config, compute_config, dist_config, data_config, unique_tag, paths
+        self, train_config, compute_config, dist_config, data_config, unique_tag, paths, skip_estimator=None
     ):
         if not data_config and not train_config.get("training_data_path", None):
             # "paths" = {
@@ -74,7 +86,7 @@ class FMSAdapter(VanillaAdapter):
                     data_paths.append(path)
             data_config = self._populate_data_config(data_paths)
         ir, _ = super().execute(
-            train_config, compute_config, dist_config, data_config, unique_tag
+            train_config, compute_config, dist_config, data_config, unique_tag, skip_estimator
         )
         ir = ir.to_dict()
         target_dir = (self.base_dir / unique_tag).resolve()

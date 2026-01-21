@@ -51,7 +51,10 @@ class ApplyComputeConfig(Action):
 
         return r_name
 
-    def apply(self, ir: IR) -> IR:
+    def apply(self, ir: IR, actions_meta: list[str]) -> IR:
+        if "skip_estimator" in actions_meta:
+            self.skip = True
+            return
         if self.heuristic_skip(ir) or self.skip:
             self.skip = True
             return

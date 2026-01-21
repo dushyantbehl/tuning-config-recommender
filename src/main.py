@@ -26,7 +26,10 @@ if __name__ == "__main__":
             "training_data_path": "ought/raft",
             "tuning_strategy": "full",
         },
+        compute_config={},
+        dist_config={},
+        data_config={},
         unique_tag="gpq12df-fms",
-        paths=[]
+        paths={},
     )
     print(result["launch_command"])

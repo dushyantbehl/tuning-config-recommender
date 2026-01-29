@@ -1,5 +1,6 @@
 import argparse
 import importlib
+import json
 import pkgutil
 import sys
 from pathlib import Path
@@ -9,7 +10,6 @@ from loguru import logger
 
 from tuning_config_recommender.actions import Action
 from tuning_config_recommender.adapters import FMSAdapter
-import json
 
 
 def load_actions_from_folder(folder_path):
@@ -95,6 +95,7 @@ def main():
     json.dump(
         result["serializable_patches"],
         open(str(Path(args.output_dir) / "stdout.json"), "w"),
+        default=str,
     )
     print(
         f"Available at {args.output_dir} and parsable stdout at {Path(args.output_dir) / 'stdout.json'}"

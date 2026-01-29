@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pandas as pd
 import yaml
+
 from tuning_config_recommender.utils.kb_table import query_kb
 
 script_dir = Path(__file__).resolve().parent

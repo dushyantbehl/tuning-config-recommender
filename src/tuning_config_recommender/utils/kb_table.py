@@ -1,6 +1,7 @@
 import fnmatch
-import yaml
 from pathlib import Path
+
+import yaml
 
 _KB = None
 _KB_TABLE = None
@@ -20,7 +21,7 @@ def _load_kb_yaml():
     if not kb_path.exists():
         raise FileNotFoundError(f"KB not found: {kb_path}")
 
-    with open(kb_path, "r", encoding="utf-8") as f:
+    with open(kb_path, encoding="utf-8") as f:
         _KB = yaml.safe_load(f) or {}
 
     return _KB

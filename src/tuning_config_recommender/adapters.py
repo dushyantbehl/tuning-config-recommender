@@ -1,3 +1,4 @@
+import json
 from copy import deepcopy
 from pathlib import Path
 
@@ -143,22 +144,31 @@ class FMSAdapter(VanillaAdapter):
             serializable_patches.append(
                 {"json_patch": patch["json_patch"], "comment": str(patch["comment"])}
             )
-        return {
-            "launch_command": launch_cmd,
-            "paths": {
-                "tuning_config": str(tuning_config_path),
-                "compute_config": str(compute_config_path),
-                "accelerate_config": str(accel_path),
-                "tuning_data_config": str(data_path),
-            },
-            "dict_payload": {
-                "step_config_section": {
-                    "tuning_data_config": ir_clean.get("tuning_data_config", {}),
-                    "tuning_config": ir_clean.get("tuning_config", {}),
-                    "compute_config": ir_clean.get("compute_config", {}),
-                    "acceleration_config": ir_clean.get("accelerate_config", {}),
-                }
-            },
-            "patches": patches,
-            "serializable_patches": serializable_patches,
-        }
+        return json.loads(
+            json.dumps(
+                {
+                    "launch_command": launch_cmd,
+                    "paths": {
+                        "tuning_config": str(tuning_config_path),
+                        "compute_config": str(compute_config_path),
+                        "accelerate_config": str(accel_path),
+                        "tuning_data_config": str(data_path),
+                    },
+                    "dict_payload": {
+                        "step_config_section": {
+                            "tuning_data_config": ir_clean.get(
+                                "tuning_data_config", {}
+                            ),
+                            "tuning_config": ir_clean.get("tuning_config", {}),
+                            "compute_config": ir_clean.get("compute_config", {}),
+                            "acceleration_config": ir_clean.get(
+                                "accelerate_config", {}
+                            ),
+                        }
+                    },
+                    "patches": patches,
+                    "serializable_patches": serializable_patches,
+                },
+                default=str,
+            )
+        )

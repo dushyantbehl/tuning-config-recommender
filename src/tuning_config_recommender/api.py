@@ -1,17 +1,19 @@
-from fastapi import FastAPI, BackgroundTasks
-from fastapi.middleware.cors import CORSMiddleware
-from typing import Optional
+import asyncio
 import os
+import uuid
+from datetime import UTC, datetime, timezone
+from pathlib import Path
+from typing import Optional
+
+import yaml
+from fastapi import BackgroundTasks, FastAPI
+from fastapi.encoders import jsonable_encoder
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from loguru import logger
 from pydantic import BaseModel
-from fastapi.responses import JSONResponse
-from fastapi.encoders import jsonable_encoder
+
 from tuning_config_recommender.adapters import FMSAdapter
-from pathlib import Path
-from datetime import datetime, timezone
-import uuid
-import yaml
-import asyncio
 
 app = FastAPI(title="Recommender API")
 
@@ -36,15 +38,15 @@ async def delete_files(file_paths: list[str]) -> None:
 
 
 class RecommendationsRequest(BaseModel):
-    tuning_config: Optional[dict] = None
-    tuning_data_config: Optional[dict] = None
-    compute_config: Optional[dict] = None
-    accelerate_config: Optional[dict] = None
-    skip_estimator: Optional[bool] = False
+    tuning_config: dict | None = None
+    tuning_data_config: dict | None = None
+    compute_config: dict | None = None
+    accelerate_config: dict | None = None
+    skip_estimator: bool | None = False
 
 
 def generate_unique_stamps():
-    timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S")
+    timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S")
     random_id = uuid.uuid4().hex[:8]
     return f"{timestamp}_{random_id}"
 

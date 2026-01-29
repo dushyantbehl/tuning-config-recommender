@@ -44,7 +44,7 @@ def fmt_cli_value(v):
     if isinstance(v, (int, float)):
         return f"'{v}'"
     if isinstance(v, dict):
-        return f"'{json.dumps(v)}'"
+        return f"'{json.dumps(v, default=str)}'"
     if isinstance(v, (list, tuple)):
         return " ".join(f"'{str(x).lower()}'" for x in v)
     return f"'{v}'"

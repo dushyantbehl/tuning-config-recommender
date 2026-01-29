@@ -120,7 +120,7 @@ def get_model_path(model_name_or_path: str, unique_tag: str) -> str:
     ]
 
     if os.path.isdir(model_name_or_path):
-        return model_name_or_path
+        return str(model_name_or_path)
     else:
         BASE_DIR = Path(__file__).parent.parent
         cached_model_path = (

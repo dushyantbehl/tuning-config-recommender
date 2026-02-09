@@ -90,8 +90,8 @@ class ApplyComputeConfig(Action):
         # while the recommender model uses batch size across gpus.
         # Current solution - test every #GPU in 1,2,4,8 and pick the smallest one that we get
         # recommendation for
-        r_max_seq_length = ir.tuning_config.get("max_seq_length", 2048)
-        r_batch_size = ir.tuning_config.get("per_device_batch_size", 1)
+        r_max_seq_length = ir.tuning_config.get("max_seq_length", 4096)
+        r_batch_size = ir.tuning_config.get("per_device_train_batch_size", 8)
 
         for r_num_gpu in [1, 2, 4, 8]:
             configuration = {

@@ -1,9 +1,10 @@
+from typing import Optional
+
 from loguru import logger
 
 from .actions import IR, Action, Comment, PatchLevel, PatchType
 
 try:
-    from autoconf.utils.config_mapper import map_valid_model_name
     from fm_training_estimator.regressor.min_gpu.recommender import (
         MinGpuRecommenderCaller,
     )
@@ -17,13 +18,23 @@ except ImportError:
 
 
 class ApplyComputeConfig(Action):
-    _recommender: "MinGpuRecommenderCaller" = None
+    """Action to apply compute configuration recommendations using GPU estimator."""
+
+    # Constants
+    DEFAULT_GPU_MODEL = "NVIDIA-A100-SXM4-80GB"
+    DEFAULT_MAX_SEQ_LENGTH = 2048
+    DEFAULT_BATCH_SIZE = 1
+    DEFAULT_TUNING_METHOD = "full"
+    RECOMMENDER_FAILURE_CODE = -1
+    RECOMMENDER_MODE = "avoid_oom"
+
+    _recommender: MinGpuRecommenderCaller | None = None
 
     def __init__(self):
         if not skip_autoconf:
             if self._recommender is None:
                 logger.debug("No recommender instance set.. creating one")
-                self._recommender = MinGpuRecommenderCaller()
+                self._recommender = MinGpuRecommenderCaller()  # type: ignore
 
     def heuristic_skip(self, ir):
         return skip_autoconf
@@ -37,89 +48,236 @@ class ApplyComputeConfig(Action):
         This has been extracted from the IR and mapped to a model name in the Min GPU recommender database.
         The mapping will return the input if no match is found.
         :rtype: str
+
+        Examples:
+            'prefix://prod/base_training/models/model_shared/granite-4.0-h-micro/r251007a' -> 'granite-4.0-h-micro'
+            '/root_dir/sub_dir1/granite-2b-base/20250319T181102' -> 'granite-2b-base'
+            'ibm-granite/granite-3.1-8b-base' -> 'granite-3.1-8b-base'
         """
+        import re
+
         logger.debug(f"Model path received: {m}")
-        # When a unique tag is given, the model path will contain an additional path component at the end
-        # Thus we will start from the last path component and work backwards for atleast one more mapping
-        for _ in range(2):
-            components = m.rpartition("/")
-            logger.debug(f"Model path split into: {components}")
-            r_name = map_valid_model_name(components[2])
-            if r_name == components[2]:
-                m = components[0]
+
+        # Split by '/' to get path components
+        components = m.split("/")
+
+        # Filter out empty components
+        components = [c for c in components if c]
+
+        if not components:
+            logger.warning(f"No valid components found in model path: {m}")
+            return m
+
+        # Pattern to identify timestamp-like suffixes (e.g., r251007a, 20250319T181102)
+        # These typically start with 'r' followed by digits, or are pure date/timestamp formats
+        timestamp_pattern = re.compile(
+            r"^(r\d+[a-z]?|\d{8}T\d{6}|\d{14})$", re.IGNORECASE
+        )
+
+        # Work backwards through components to find the model name
+        # Skip the last component if it looks like a timestamp/tag
+        for i in range(len(components) - 1, -1, -1):
+            component = components[i]
+
+            # Skip if it matches timestamp pattern
+            if timestamp_pattern.match(component):
+                logger.debug(f"Skipping timestamp-like component: {component}")
                 continue
-            else:
-                break
-        logger.debug(f"Stopped at result: {r_name}")
 
-        return r_name
+            # Skip protocol prefixes (e.g. 'http:', 'https:')
+            if component.endswith(":"):
+                logger.debug(f"Skipping protocol component: {component}")
+                continue
 
-    def apply(self, ir: IR, actions_meta: list[str]) -> IR:
+            # This should be the model name
+            logger.debug(f"Inferred model name: {component}")
+            return component
+
+        # Fallback: return the last non-empty component
+        result = components[-1]
+        logger.debug(f"Fallback to last component: {result}")
+        return result
+
+    def _validate_required_configs(self, ir: IR) -> bool:
+        """Validate that required configs are present in IR.
+
+        Args:
+            ir: Intermediate representation to validate
+
+        Returns:
+            bool: True if valid, False otherwise (sets self.skip and logs warning)
+        """
+        if not ir.compute_config:
+            logger.warning(
+                "compute_config is not present in IR, skipping compute action"
+            )
+            self.skip = True
+            return False
+
+        if not ir.tuning_config:
+            logger.warning(
+                "tuning_config is not present in IR, skipping compute action"
+            )
+            self.skip = True
+            return False
+
+        return True
+
+    def _build_recommender_config(self, ir: IR) -> dict:
+        """Build configuration dict for the GPU recommender.
+
+        Args:
+            ir: Intermediate representation with tuning config
+
+        Returns:
+            dict: Configuration for recommender
+
+        Raises:
+            ValueError: If model name cannot be determined
+        """
+        # Type guard - we know tuning_config is not None due to validation
+        assert ir.tuning_config is not None
+
+        # Extract model name with fallback
+        model_name = ir.tuning_config.get("model_name_or_path")
+        if not model_name:
+            raise ValueError(f"model name was not populated in the representation {ir}")
+
+        # Infer the actual model name from the path
+        inferred_model_name = self._infer_model_name(model_name)
+
+        # Extract current compute config
+        # assert ir.compute_config is not None
+        # num_nodes = ir.compute_config.get("num_nodes", 1)
+        # num_gpus_per_node = ir.compute_config.get("num_gpus_per_node", 8)
+
+        return {
+            "model_name": inferred_model_name,
+            "method": ir.tuning_config.get(
+                "tuning_strategy", self.DEFAULT_TUNING_METHOD
+            ),
+            "gpu_model": self.DEFAULT_GPU_MODEL,  # TODO: Make configurable based on environment
+            "tokens_per_sample": ir.tuning_config.get(
+                "max_seq_length", self.DEFAULT_MAX_SEQ_LENGTH
+            ),
+            "per_device_train_batch_size": ir.tuning_config.get(
+                "per_device_train_batch_size", self.DEFAULT_BATCH_SIZE
+            ),
+        }
+
+    def _apply_recommendation(
+        self, config: dict, current_nodes: int, current_gpus: int
+    ) -> tuple[int, int]:
+        """Apply GPU recommender and decide whether to use recommendation.
+
+        Args:
+            config: Configuration for recommender
+            current_nodes: Current number of nodes
+            current_gpus: Current GPUs per node
+
+        Returns:
+            tuple[int, int]: (num_nodes, num_gpus_per_node) to use
+        """
+        logger.debug(f"Sending configuration to min gpu recommender: {config}")
+
+        result = self._recommender.run(config, self.RECOMMENDER_MODE)  # type: ignore
+
+        # Early return if recommender failed
+        if result["gpus_per_worker"] == self.RECOMMENDER_FAILURE_CODE:
+            logger.debug(
+                f"Recommender was not able to issue recommendation for {config}"
+            )
+            return current_nodes, current_gpus
+
+        recommended_nodes = result["workers"]
+        recommended_gpus = result["gpus_per_worker"]
+
+        logger.debug(
+            f"Recommender recommends - {recommended_nodes} nodes, {recommended_gpus} GPUs; "
+            f"original {current_nodes} nodes, {current_gpus} GPUs"
+        )
+
+        total_gpus_original = current_gpus * current_nodes
+        total_gpus_recommended = recommended_gpus * recommended_nodes
+
+        # Only apply recommendation if it suggests more GPUs (to avoid OOM)
+        if total_gpus_recommended > total_gpus_original:
+            logger.debug(
+                "Replacing original compute config with recommender's suggestion"
+            )
+            return recommended_nodes, recommended_gpus
+        else:
+            logger.debug(
+                "Recommender's suggestion is lower than original request, keeping original"
+            )
+            return current_nodes, current_gpus
+
+    def _generate_comment(self, num_nodes: int, num_gpus_per_node: int) -> str:
+        """Generate appropriate comment for the compute configuration.
+
+        Args:
+            num_nodes: Number of nodes
+            num_gpus_per_node: GPUs per node
+
+        Returns:
+            str: Comment message
+        """
+        if num_nodes == 1 and num_gpus_per_node == 8:
+            return "compute config for single node configuration"
+        return ""
+
+    def apply(self, ir: IR, actions_meta: list[str] = None) -> IR:
+        """Apply compute configuration recommendations.
+
+        Args:
+            ir: Intermediate representation
+            actions_meta: List of action metadata flags
+
+        Returns:
+            IR with updated compute config, or None if skipped
+        """
+        if actions_meta is None:
+            actions_meta = []
+
+        # Early returns for skip conditions
         if "skip_estimator" in actions_meta:
             self.skip = True
-            return
+            return ir
+
         if self.heuristic_skip(ir) or self.skip:
             self.skip = True
-            return
+            return ir
+
         # TODO: fast kernels are not supported for some optimizer classes
         # we should either edit this or skip this optimization
+
+        # Validate required configurations
+        if not self._validate_required_configs(ir):
+            return ir
+
+        # Type guards - we know these are not None due to validation
+        assert ir.compute_config is not None
+
+        # Extract current compute config
         num_nodes = ir.compute_config.get("num_nodes", 1)
         num_gpus_per_node = ir.compute_config.get("num_gpus_per_node", 8)
 
         logger.debug(
-            f"IR has the configuration workers:{num_nodes} gpus:{num_gpus_per_node}"
+            f"IR has configuration: {num_nodes} nodes, {num_gpus_per_node} GPUs"
         )
-        # invoke min_gpu_recommender
 
-        r_model_name = ir.tuning_config.get("model_name_or_path", None)
-        if not r_model_name:
-            raise Exception(f"model name was not populated in the representation {ir}")
-
-        # Find a valid mapping for the model name
-        r_model_name = self._infer_model_name(r_model_name)
-
-        # Check if tuning method is enabled, if not go for full
-        r_method = ir.tuning_config.get("tuning_strategy", "full")
-
-        # set GPU model - for now we assume it's for Vela
-        # TODO: obtain some information from the environment to determine which
-        # cluster, GPU, etc. are being targeted
-        r_gpu = "NVIDIA-A100-SXM4-80GB"
-
-        # set batch size - this is tricky because we get the per-device batch size from IR
-        # while the recommender model uses batch size across gpus.
-        # Current solution - test every #GPU in 1,2,4,8 and pick the smallest one that we get
-        # recommendation for
-        r_max_seq_length = ir.tuning_config.get("max_seq_length", 4096)
-        r_batch_size = ir.tuning_config.get("per_device_train_batch_size", 8)
-
-        for r_num_gpu in [1, 2, 4, 8]:
-            configuration = {
-                "model_name": r_model_name,
-                "method": r_method,
-                "gpu_model": r_gpu,  # Assume it's Vela
-                "tokens_per_sample": r_max_seq_length,
-                "batch_size": r_batch_size * r_num_gpu,
-                "gpus_per_worker": r_num_gpu,
-                "model_version": "2.0.0",
-            }
-            logger.debug(
-                f"Sending this configuration to min gpu recommender: {configuration}"
+        # Build and apply recommendation
+        try:
+            recommender_config = self._build_recommender_config(ir)
+            num_nodes, num_gpus_per_node = self._apply_recommendation(
+                recommender_config, num_nodes, num_gpus_per_node
             )
-            res = self._recommender.run(configuration, "min_gpu")
-            if res["gpus_per_worker"] == -1:
-                logger.debug(
-                    f"Recommender was not able to issue recommender for {configuration}"
-                )
-                continue
-            else:
-                num_gpus_per_node = res["gpus_per_worker"]
-                num_nodes = res["workers"]
-                logger.debug(
-                    f"recommender returned configuration workers:{num_nodes} gpus:{num_gpus_per_node}"
-                )
-                break
+        except ValueError as e:
+            logger.error(f"Failed to build recommender config: {e}")
+            self.skip = True
+            return ir
 
+        # Build result IR
         return_ir = IR(
             compute_config={
                 "num_nodes": num_nodes,
@@ -127,12 +285,9 @@ class ApplyComputeConfig(Action):
             },
             type=PatchType.COMPATIBILITY,
             level=PatchLevel.SUGGESTION,
-            comment=Comment(
-                "compute config for single node configuration"
-                if (num_nodes == 1 and num_gpus_per_node == 8)
-                else ""
-            ),
+            comment=self._generate_comment(num_nodes, num_gpus_per_node),
         )
+
         self.json_merge_patches.append(return_ir)
         self.skip = True
         return return_ir

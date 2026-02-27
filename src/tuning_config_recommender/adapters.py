@@ -112,6 +112,7 @@ class FMSAdapter(VanillaAdapter):
         unique_tag,
         paths,
         skip_estimator=None,
+        fsdp_args_format="accelerate",
     ):
         try:
             if not data_config and not tuning_config.get("training_data_path", None):
@@ -162,7 +163,8 @@ class FMSAdapter(VanillaAdapter):
                 ir_clean.get("compute_config", {}), compute_config_path
             )
             launch_cmd = build_launch_command(
-                ir_clean, data_path, accel_path, dynamic_args
+                ir_clean, data_path, accel_path, dynamic_args,
+                fsdp_args_format=fsdp_args_format,
             )
             serializable_patches = []
             for patch in patches:

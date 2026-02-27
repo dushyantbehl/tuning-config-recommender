@@ -69,19 +69,78 @@ def prepare_ir_for_accelerate(ir: dict):
     return ir, dynamic
 
 
+def _accel_to_fsdp_args(accel_cfg: dict) -> list[str]:
+    """Convert accelerate_config FSDP settings to HF TrainingArguments --fsdp / --fsdp_config."""
+    fsdp_cfg = accel_cfg.get("fsdp_config", {})
+    if not fsdp_cfg and accel_cfg.get("distributed_type") != "FSDP":
+        return []
+
+    # Map accelerate sharding strategy to HF --fsdp flags.
+    strategy_map = {
+        "FULL_SHARD": "full_shard",
+        "SHARD_GRAD_OP": "shard_grad_op",
+        "HYBRID_SHARD": "hybrid_shard",
+        "HYBRID_SHARD_ZERO2": "hybrid_shard_zero2",
+        "NO_SHARD": "no_shard",
+        1: "full_shard",
+        2: "shard_grad_op",
+        3: "no_shard",
+        4: "hybrid_shard",
+        5: "hybrid_shard_zero2",
+    }
+    raw_strategy = fsdp_cfg.get("fsdp_sharding_strategy", "FULL_SHARD")
+    sharding = strategy_map.get(raw_strategy, "full_shard")
+
+    fsdp_flags = [sharding]
+    if fsdp_cfg.get("fsdp_auto_wrap_policy") == "TRANSFORMER_BASED_WRAP":
+        fsdp_flags.append("auto_wrap")
+    if fsdp_cfg.get("fsdp_offload_params", False):
+        fsdp_flags.append("offload")
+
+    # Build --fsdp_config JSON (strip fsdp_ prefixes for HF TrainingArguments).
+    prefix_map = {
+        "fsdp_auto_wrap_policy": "auto_wrap_policy",
+        "fsdp_backward_prefetch": "backward_prefetch",
+        "fsdp_backward_prefetch_policy": "backward_prefetch",
+        "fsdp_forward_prefetch": "forward_prefetch",
+        "fsdp_offload_params": "offload_params",
+        "fsdp_state_dict_type": "state_dict_type",
+        "fsdp_cpu_ram_efficient_loading": "cpu_ram_efficient_loading",
+        "fsdp_sync_module_states": "sync_module_states",
+    }
+    hf_fsdp_config = {}
+    for accel_key, hf_key in prefix_map.items():
+        if accel_key in fsdp_cfg:
+            hf_fsdp_config[hf_key] = fsdp_cfg[accel_key]
+
+    args = [f"--fsdp {fmt_cli_value(' '.join(fsdp_flags))}"]
+    if hf_fsdp_config:
+        args.append(f"--fsdp_config {fmt_cli_value(hf_fsdp_config)}")
+    return args
+
+
 def build_launch_command(
     ir: dict[str, Any],
     data_config_path: Path,
     accelerate_config_path: Path,
     dynamic_args: list[str] = None,
+    fsdp_args_format: str = "accelerate",
 ) -> str:
     try:
-        cmd = [
-            "accelerate launch",
-            f"--config_file {accelerate_config_path}",
-            *(dynamic_args or []),
-            "-m 'tuning.sft_trainer'",
-        ]
+        if fsdp_args_format == "hftrainer":
+            cmd = [
+                "-m 'tuning.sft_trainer'",
+            ]
+            # Convert accelerate FSDP config to HF TrainingArguments.
+            fsdp_args = _accel_to_fsdp_args(ir.get("accelerate_config", {}))
+            cmd.extend(fsdp_args)
+        else:
+            cmd = [
+                "accelerate launch",
+                f"--config_file {accelerate_config_path}",
+                *(dynamic_args or []),
+                "-m 'tuning.sft_trainer'",
+            ]
 
         for k, v in ir.get("tuning_config", {}).items():
             if v is not None and k != "training_data_path":

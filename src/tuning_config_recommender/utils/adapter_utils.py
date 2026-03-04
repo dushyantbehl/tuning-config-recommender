@@ -129,7 +129,7 @@ def build_launch_command(
     try:
         if fsdp_args_format == "hftrainer":
             cmd = [
-                "-m 'tuning.sft_trainer'",
+                "python -m tuning.sft_trainer",
             ]
             # Convert accelerate FSDP config to HF TrainingArguments.
             fsdp_args = _accel_to_fsdp_args(ir.get("accelerate_config", {}))
